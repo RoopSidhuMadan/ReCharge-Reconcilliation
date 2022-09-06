@@ -1,0 +1,58 @@
+select Transaction_Id,trans_ref_no as Trans_Ref_No,SDL_COMMENTS,Spice_Status,SDL_STATUS, SDL_Refund_Amount,Transaction_Date,SDL_Trans_Amount,AGG_NAME,
+        AGG_STATUS,AGG_AMOUNT,
+        coalesce(SDL_Trans_Amount,0)-coalesce(AGG_AMOUNT,0) as Difference from 
+        (select Transaction_Id,
+        case 
+                when SDL_Refund_Amount is null then 'SUCCESS' else 'REFUND' end as SDL_STATUS,
+                SDL_Refund_Amount,Transaction_Date,SDL_Trans_Amount,Spice_Status,trans_ref_no,
+        case 
+                when  substr(Transaction_Id,0,2)='TW' then 'THINKWALNUT'
+                 when  substr(Transaction_Id,0,4)='NJRI' then 'NJRI'
+                 when  substr(Transaction_Id,0,3)='JIO' then 'JIO'
+                 end as SDL_COMMENTS       
+        from
+        (select trans_id as Transaction_Id,sum(trans_amt) as SDL_Trans_Amount,trans_status as Spice_Status,trans_date as Transaction_Date from prod_dwh.wallet_trans  where date(trans_date)="2022-08-10" and comments in ('Recharge_Mobile')
+        group by Transaction_Id,trans_status,trans_date 
+        ) as spice_wallet_output
+        LEFT OUTER JOIN
+        (  select refund_type,trans_id,refund_amt as SDL_Refund_Amount,refund_date,a.client_id,wallet_id,opening_bal,closing_bal,device_no,trans_date,trans_ref_no , comments, c.client_wallet_id as DistributorWalletId,
+                from prod_dwh.client_refund a, prod_dwh.distributor_retailer b , prod_dwh.client_wallet c where
+                a.client_id= b.retailer_id and b.distributor_id= c.client_id and refund_type="Recharge" and date(trans_date)="2022-08-10"
+                UNION ALL
+                select a.refund_type,a.trans_id, a.refund_amt, a.refund_date, a.client_id,a.client_id, a.opening_bal, a.closing_bal, a.device_no, a.trans_date, a.trans_ref_no , a.comments,null,
+                from prod_dwh.client_refund a,prod_dwh.recharge b where date(a.trans_date)="2022-08-10" and
+                a.TRANS_ID=b.trans_id and  a.refund_type="Recharge"
+        ) as refund_report_output
+        ON spice_wallet_output.Transaction_Id=refund_report_output.trans_id
+        )
+        LEFT OUTER JOIN
+        (
+            select client_txn_id as TRANS_ID,status as AGG_STATUS,sum(amount) as AGG_AMOUNT,date(request_timestamp) as AGG_DATE,
+           case 
+                when  substr(client_txn_id,0,2)='TW' then 'TW'
+                 end as AGG_NAME       
+            from `sm_recon.ts_recharge_think_wallet_log`
+          where date(request_timestamp)="2022-08-10"
+          group by status,client_txn_id,date(request_timestamp)
+          UNION ALL
+          select system_ref_no,recharge_status,sum(amount),order_date,
+           case 
+                 when  substr(system_ref_no,0,4)='NJRI' then 'NJRI'
+                 end as AGG_NAME
+                  from `sm_recon.ts_recharge_njri_transaction_log`
+          where date(order_date)="2022-08-10" 
+          group by system_ref_no,order_date,recharge_status
+          UNION ALL
+          select refill_id,result_description,sum(amount),date(real_time),
+           case 
+                 when  substr(refill_id,0,3)='JIO' then 'JIO'
+                 end as AGG_NAME from `sm_recon.ts_recharge_jio_spice_money_log`
+          where date(real_time)="2022-08-10"
+            group by refill_id,result_description,date(real_time)
+        ) as aggregator_output
+        ON Transaction_Id= aggregator_output.TRANS_ID
+        
+
+
+
+   

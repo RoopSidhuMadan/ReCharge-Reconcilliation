@@ -1,0 +1,23 @@
+select COMMENTS,TRANSFER_DATE,CLIENT_ID,AMOUNT_TRANSFERRED,device_type,OPERATOR_TITLE
+        from
+        (select date(t1.transfer_date) as TRANSFER_DATE,
+        t2.retailer_id AS CLIENT_ID,
+        sum(t1.amount_transferred) as AMOUNT_TRANSFERRED,
+        t1.comments as COMMENTS,t1.unique_identification_no as FTR_UNIQUE_IDENTIFICATION_NO,
+        case 
+                when  substr(t1.unique_identification_no,0,2)='TW' then 'THINKWALNUT'
+                 when  substr(t1.unique_identification_no,0,4)='NJRI' then 'NJRI'
+                 when  substr(t1.unique_identification_no,0,3)='JIO' then 'JIO'
+                 end as AGG_ID       
+        FROM spicemoney-dwh.prod_dwh.cme_wallet as t1
+                JOIN spicemoney-dwh.prod_dwh.client_details as t2 ON t1.retailer_wallet_id=t2.ret_wallet_id
+                where t1.comments IN ('IRCTC Recharge Discount','RECHARGE-Discount-Mobile','RECHARGE-Discount-Mobile-Reversal') and 
+                DATE(t1.transfer_date) = "2022-08-10"
+                GROUP BY t1.UNIQUE_IDENTIFICATION_NO,CLIENT_ID,COMMENTS,TRANS_TYPE,TRANSFER_DATE,AGG_ID
+        ) as FTR_revoke_output
+        LEFT OUTER JOIN
+        (
+         select t1.trans_id,t1.device_type,t1.operator_id,t2.name as OPERATOR_TITLE from prod_dwh.recharge t1, `prod_dwh.operator` t2
+         where t1.operator_id=t2.operator_id
+        ) as recharge_output
+        ON recharge_output.trans_id=FTR_UNIQUE_IDENTIFICATION_NO

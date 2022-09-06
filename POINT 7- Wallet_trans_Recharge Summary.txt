@@ -1,0 +1,30 @@
+select 
+        case 
+                when  substr(spice_wallet_output.trans_id,0,2)='TW' then 'THINKWALNUT'
+                 when  substr(spice_wallet_output.trans_id,0,4)='NJRI' then 'NJRI'
+                 when  substr(spice_wallet_output.trans_id,0,3)='JIO' then 'JIO'
+                 end as Rch_Aggregator ,spice_wallet_output.trans_id as Transaction_Id, client_id as Client_Id, device_type as Device_Type ,OPERATOR_TITLE,SumOf_Trans_Amount,coalesce (SumOfB2B_RFD,0) as SumOfB2B_RFD,coalesce(SumOf_Trans_Amount,0)-coalesce (SumOfB2B_RFD,0) as NetAmount
+        from
+        (
+        (select trans_id,sum(trans_amt) as SumOf_Trans_Amount,trans_date as Transaction_Date from prod_dwh.wallet_trans  where date(trans_date)="2022-08-10" and comments in ('Recharge_Mobile')
+        group by trans_date ,trans_id
+        ) as spice_wallet_output
+        LEFT OUTER JOIN
+        (
+ select t1.trans_id,t1.client_id,t1.device_type,t1.operator_id,t2.name as OPERATOR_TITLE from prod_dwh.recharge t1, `prod_dwh.operator` t2
+ where t1.operator_id=t2.operator_id
+) as recharge_output
+ON recharge_output.trans_id=spice_wallet_output.trans_id
+        )
+        FULL OUTER JOIN
+        (  select trans_id,refund_amt as SumOfB2B_RFD,refund_date,trans_date,comments
+                from prod_dwh.client_refund a, prod_dwh.distributor_retailer b , prod_dwh.client_wallet c where
+                a.client_id= b.retailer_id and b.distributor_id= c.client_id and refund_type="Recharge" and date(trans_date)="2022-08-10"
+                UNION ALL
+                select a.trans_id,a.refund_amt, a.refund_date, a.trans_date, a.comments
+                from prod_dwh.client_refund a,prod_dwh.recharge b where date(a.trans_date)="2022-08-10" and
+                a.TRANS_ID=b.trans_id and  a.refund_type="Recharge"
+        ) as refund_report_output
+        ON spice_wallet_output.trans_id=refund_report_output.trans_id
+
+       
