@@ -49,7 +49,7 @@ case
 FROM spicemoney-dwh.prod_dwh.cme_wallet as t1
         JOIN spicemoney-dwh.prod_dwh.client_details as t2 ON t1.retailer_wallet_id=t2.ret_wallet_id
         where t1.comments IN ('RECHARGE-Discount-Mobile-Reversal') and 
-        DATE(t1.transfer_date) = "2022-08-10"
+        DATE(t1.transfer_date) = "2022-08-12"
         GROUP BY t1.UNIQUE_IDENTIFICATION_NO,CLIENT_ID,COMMENTS,TRANS_TYPE,TRANSFER_DATE,AGG_ID
 ) as FTR_revoke_output
 LEFT OUTER JOIN
@@ -60,12 +60,12 @@ LEFT OUTER JOIN
 ON recharge_output.trans_id=FTR_UNIQUE_IDENTIFICATION_NO
 LEFT OUTER JOIN
 (
-  select commission_amount as NJRI_Commission_Reversal_Amount,recharge_amount as NJRI_Reversal_Amount,system_reference_no from `sm_recon.ts_recharge_njri_reversed_commission_report`
+  select commission_amount as NJRI_Commission_Reversal_Amount,recharge_amount as NJRI_Reversal_Amount,system_reference_no from `sm_recon.ts_recharge_njri_reversed_commission_report` where date(reversal_date)="2022-08-12"
 ) as njri_reversed_commission_output
 ON njri_reversed_commission_output.system_reference_no=FTR_UNIQUE_IDENTIFICATION_NO
 LEFT OUTER JOIN
 (
-  select amount as TW_Reversal_Amount,amount_deducted,client_txn_id,amount-rollback_amount as TW_Commission_Reversal_Amount from `sm_recon.ts_recharge_think_wallet_log` where status in ('Pending','Rollback')
+  select amount as TW_Reversal_Amount,amount_deducted,client_txn_id,amount-rollback_amount as TW_Commission_Reversal_Amount from `sm_recon.ts_recharge_think_wallet_log` where status in ('Pending','Rollback') and date(request_timestamp)="2022-08-12"
 ) as tw_commision_output
 ON tw_commision_output.client_txn_id=FTR_UNIQUE_IDENTIFICATION_NO
 )
