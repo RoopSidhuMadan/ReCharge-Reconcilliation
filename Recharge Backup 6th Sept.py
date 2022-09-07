@@ -1,12 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
-#!/usr/bin/env python
-# coding: utf-8
-
 # In[84]:
 
 
@@ -41,33 +35,33 @@ def main():
     date = d.today()-timedelta(1)
     current_date5 = date.strftime('%d-%m-%Y')
 
-    date = date.today()-timedelta(1)
+    date = d.today()-timedelta(1)
     current_date2 = date.strftime('%d-%m-%Y')
 
-    date = date.today()-timedelta(2)
+    date = d.today()-timedelta(2)
     current_date3 = date.strftime('%d-%m-%Y')
 
-    date = date.today()
+    date = d.today()
     current_date4 = date.strftime('%d-%m-%Y')
 
-    date = date.today()
+    date = d.today()
     current_date6 = date.strftime('%Y%m%d')
 
-    current_date = date.today()-timedelta(1)
+    current_date = d.today()-timedelta(1)
 
-    date = date.today()
+    date = d.today()
     current_year = date.strftime('%Y')
 
-    date = date.today()
+    date = d.today()
     current_month = date.strftime('%m')
 
-    date = date.today()
+    date = d.today()
     current_day = date.strftime('%d')
 
-    date = date.today()
+    date = d.today()
     current_mon = date.strftime('%b')
     
-    date = date.today()
+    date = d.today()
     current_yr = date.strftime('%y')
     
     credentials = service_account.Credentials.from_service_account_file(key_path,scopes=["https://www.googleapis.com/auth/cloud-platform"])
@@ -406,7 +400,7 @@ def main():
     #print("Data moved to prod_wallet_ybl_bank_statement_log table")
     
     
-    #---------------------------------------------------------------------------------------------------------------------
+     #---------------------------------------------------------------------------------------------------------------------
     #Loading the ReversedCommissionReport  ( NJRI) into the database
     #---------------------------------------------------------------------------------------------------------------------
     schema_njri_revcom = [{'name':'order_no','type':'STRING'},
@@ -450,24 +444,23 @@ def main():
     list2_njri_revcom=['recharge_amount',
                     'commission_percentage',
                     'commission_amount']
-  
-    df_njri_revcom = pd.read_excel('gs://sm-prod-rpa/'+str(current_year)+'/'+'08'+'/'+'12'+'/EmailReports/NJRI_Recharge/ReversedCommissionReport_*.xlsx',skiprows=1,names=header_list_njri_revcom ,storage_options={"token": key_path},
-                                 header=None,sheet_name='Report', parse_dates = (['order_date','reversal_date']))             
-   
+    
+    #######CHANGE THIS
    
     
+
+    print('gs://sm-prod-rpa/'+str(current_year)+'/'+'08'+'/'+str(day)+'/EmailReports/NJRI_Recharge/ReversedCommissionReport_*.xlsx')
+    df_njri_revcom = pd.read_excel('gs://sm-prod-rpa/'+str(current_year)+'/'+'11'+'/'+str(day)+'/EmailReports/NJRI_Recharge/ReversedCommissionReport_*.xlsx',skiprows=1,names=header_list_njri_revcom ,storage_options={"token": key_path},
+                                     header=None,sheet_name='Report', parse_dates = (['order_date','reversal_date']))             
+
     df_njri_revcom[list1_njri_revcom]=df_njri_revcom[list1_njri_revcom].astype(str)
     df_njri_revcom[list2_njri_revcom]=df_njri_revcom[list2_njri_revcom].astype(float)
     df_njri_revcom['system_reference_no']=df_njri_revcom['system_reference_no'].str.replace(r"'",'')
-   
-   
-   
     df_njri_revcom.to_gbq(destination_table='sm_recon.ts_recharge_njri_reversed_commission_report', project_id='spicemoney-dwh', if_exists='append' , table_schema = schema_njri_revcom,credentials=credentials)
     print("Data moved to ts_recharge_njri_reversed_commission_report table")
-   
+        
     #df.to_gbq(destination_table='prod_sm_recon.prod_recharge_think_wallet_refund_log', project_id='spicemoney-dwh', if_exists='append' , table_schema = schema_tw_ref,credentials=credentials)
     #print("Data moved to prod_wallet_ybl_bank_statement_log table")
-    
     #---------------------------------------------------------------------------------------------------------------------
     #Loading the CommissionCalculateReport  ( NJRI) into the database
     #---------------------------------------------------------------------------------------------------------------------
@@ -534,64 +527,89 @@ def main():
     #print("Data moved to prod_wallet_ybl_bank_statement_log table")
     
     ################################################################################################################
-    #
+    #Reconciliation-Spice Agent Wallet Vs TW,NJRI , JIO Transaction logs: -		
     ###############################################################################################################
     
     
     sql_query='''
-    select Transaction_Id,trans_ref_no as Trans_Ref_No,SDL_COMMENTS,Spice_Status,SDL_STATUS, SDL_Refund_Amount,Transaction_Date,SDL_Trans_Amount,AGG_NAME,
-        AGG_STATUS,AGG_AMOUNT,
-        coalesce(SDL_Trans_Amount,0)-coalesce(AGG_AMOUNT,0) as Difference from 
-        (select Transaction_Id,
-        case 
-                when SDL_Refund_Amount is null then 'SUCCESS' else 'REFUND' end as SDL_STATUS,
-                SDL_Refund_Amount,Transaction_Date,SDL_Trans_Amount,Spice_Status,trans_ref_no,
-        case 
-                when  substr(Transaction_Id,0,2)='TW' then 'THINKWALNUT'
-                 when  substr(Transaction_Id,0,4)='NJRI' then 'NJRI'
-                 when  substr(Transaction_Id,0,3)='JIO' then 'JIO'
-                 end as SDL_COMMENTS       
+           select SDL_TRANS_ID,AGG_TRANS_ID,SDL_Trans_Ref_No,AGG_Trans_Ref_No,SDL_COMMENTS,Trans_Status,SDL_STATUS, SDL_Refund_Amount,Transaction_Date,coalesce(SDL_Trans_Amount,0) as SDL_Trans_Amount,AGG_NAME,coalesce(AGG_AMOUNT,0) as AGG_AMOUNT ,AGG_STATUS,coalesce(SDL_Trans_Amount,0)-coalesce(AGG_AMOUNT,0) as Difference
         from
-        (select trans_id as Transaction_Id,sum(trans_amt) as SDL_Trans_Amount,trans_status as Spice_Status,trans_date as Transaction_Date from prod_dwh.wallet_trans  where date(trans_date)="2022-08-10" and comments in ('Recharge_Mobile')
-        group by Transaction_Id,trans_status,trans_date 
-        ) as spice_wallet_output
-        LEFT OUTER JOIN
-        (  select refund_type,trans_id,refund_amt as SDL_Refund_Amount,refund_date,a.client_id,wallet_id,opening_bal,closing_bal,device_no,trans_date,trans_ref_no , comments, c.client_wallet_id as DistributorWalletId,
-                from prod_dwh.client_refund a, prod_dwh.distributor_retailer b , prod_dwh.client_wallet c where
-                a.client_id= b.retailer_id and b.distributor_id= c.client_id and refund_type="Recharge" and date(trans_date)="2022-08-10"
-                UNION ALL
-                select a.refund_type,a.trans_id, a.refund_amt, a.refund_date, a.client_id,a.client_id, a.opening_bal, a.closing_bal, a.device_no, a.trans_date, a.trans_ref_no , a.comments,null,
-                from prod_dwh.client_refund a,prod_dwh.recharge b where date(a.trans_date)="2022-08-10" and
-                a.TRANS_ID=b.trans_id and  a.refund_type="Recharge"
-        ) as refund_report_output
-        ON spice_wallet_output.Transaction_Id=refund_report_output.trans_id
-        )
+        (
+        select Transaction_Id as SDL_TRANS_ID,trans_ref_no as SDL_Trans_Ref_No,SDL_COMMENTS,Trans_Status,SDL_STATUS, SDL_Refund_Amount,Transaction_Date,SDL_Trans_Amount from 
+                (select Transaction_Id,
+                case 
+                        when SDL_Refund_Amount is null then 'SUCCESS' else 'REFUND' end as SDL_STATUS,
+                        SDL_Refund_Amount,Transaction_Date,SDL_Trans_Amount,Trans_Status,trans_ref_no,
+                case 
+                        when  substr(Transaction_Id,0,2)='TW' then 'THINKWALNUT'
+                         when  substr(Transaction_Id,0,4)='NJRI' then 'NJRI'
+                         when  substr(Transaction_Id,0,3)='JIO' then 'JIO'
+                         end as SDL_COMMENTS       
+                from
+
+                  (
+                  select trans_id as Transaction_Id,sum(trans_amt) as SDL_Trans_Amount,trans_status as Trans_Status,trans_date as Transaction_Date from prod_dwh.wallet_trans  where date(trans_date)="2022-08-10" and comments in ('Recharge_Mobile')
+                group by Transaction_Id,trans_status,trans_date 
+                ) as spice_wallet_output
+                LEFT OUTER JOIN
+                (  select refund_type,trans_id,refund_amt as SDL_Refund_Amount,refund_date,a.client_id,wallet_id,opening_bal,closing_bal,device_no,trans_date,trans_ref_no , comments, c.client_wallet_id as DistributorWalletId,
+                        from prod_dwh.client_refund a, prod_dwh.distributor_retailer b , prod_dwh.client_wallet c where
+                        a.client_id= b.retailer_id and b.distributor_id= c.client_id and refund_type="Recharge" and date(trans_date)="2022-08-10"
+                ) as refund_report_output
+                ON spice_wallet_output.Transaction_Id=refund_report_output.trans_id
+                )
+        )  
         LEFT OUTER JOIN
         (
-            select client_txn_id as TRANS_ID,status as AGG_STATUS,sum(amount) as AGG_AMOUNT,date(request_timestamp) as AGG_DATE,
-           case 
-                when  substr(client_txn_id,0,2)='TW' then 'TW'
-                 end as AGG_NAME       
-            from `sm_recon.ts_recharge_think_wallet_log`
-          where date(request_timestamp)="2022-08-10"
-          group by status,client_txn_id,date(request_timestamp)
-          UNION ALL
-          select system_ref_no,recharge_status,sum(amount),order_date,
-           case 
-                 when  substr(system_ref_no,0,4)='NJRI' then 'NJRI'
-                 end as AGG_NAME
-                  from `sm_recon.ts_recharge_njri_transaction_log`
-          where date(order_date)="2022-08-10" 
-          group by system_ref_no,order_date,recharge_status
-          UNION ALL
-          select refill_id,result_description,sum(amount),date(real_time),
-           case 
-                 when  substr(refill_id,0,3)='JIO' then 'JIO'
-                 end as AGG_NAME from `sm_recon.ts_recharge_jio_spice_money_log`
-          where date(real_time)="2022-08-10"
-            group by refill_id,result_description,date(real_time)
-        ) as aggregator_output
-        ON Transaction_Id= aggregator_output.TRANS_ID
+        select AGG_TRANS_ID, AGG_Trans_Ref_No,  AGG_NAME , 
+           case when REF_AGG_AMOUNT is not null then 'REFUND' else AGG_TRANS_STATUS end as AGG_STATUS,AGG_DATE,
+         AGG_AMOUNT,REF_AGG_AMOUNT
+        from 
+         (select client_txn_id as AGG_TRANS_ID,txn_id as AGG_Trans_Ref_No, case 
+                        when  substr(client_txn_id,0,2)='TW' then 'TW'
+                         end as AGG_NAME ,status as AGG_TRANS_STATUS,date(request_timestamp) as AGG_DATE,sum(amount) as AGG_AMOUNT from `sm_recon.ts_recharge_think_wallet_log`
+                  where date(request_timestamp)="2022-08-10"
+                  group by status,client_txn_id,date(request_timestamp),txn_id
+                  UNION ALL
+                  select system_ref_no,order_no,
+                  case 
+                         when  substr(system_ref_no,0,4)='NJRI' then 'NJRI'
+                         end as AGG_NAME,
+                         recharge_status,order_date,sum(amount)
+                          from `sm_recon.ts_recharge_njri_transaction_log`
+                  where date(order_date)="2022-08-10" 
+                  group by system_ref_no,order_date,recharge_status,order_no
+                  UNION ALL
+                  select refill_id,trans_id,
+                  case 
+                         when  substr(refill_id,0,3)='JIO' then 'JIO'
+                         end as AGG_NAME ,result_description,date(real_time),sum(amount)
+                   from `sm_recon.ts_recharge_jio_spice_money_log`
+                  where date(real_time)="2022-08-10"
+                    group by refill_id,result_description,date(real_time),trans_id
+         )as agg_txn_output
+         LEFT OUTER JOIN
+         (
+             select client_txn_id as REF_AGG_TRANS_ID,txn_id as REF_AGG_Trans_Ref_No, 
+          case 
+                        when  substr(client_txn_id,0,2)='TW' then 'TW'
+                         end as REF_AGG_NAME ,status as REF_AGG_TRANS_STATUS,date(request_timestamp) as REF_AGG_DATE,sum(amount) as REF_AGG_AMOUNT from `sm_recon.ts_recharge_think_wallet_refund_log`
+                  where date(request_timestamp)="2022-08-10"
+                  group by status,client_txn_id,date(request_timestamp),txn_id
+                  UNION ALL
+                  select system_ref_no,order_no,
+                  case 
+                         when  substr(system_ref_no,0,4)='NJRI' then 'NJRI'
+                         end as AGG_NAME,
+                         transaction_status,order_date,sum(amount)
+                          from `sm_recon.ts_recharge_njri_rev_transaction_log`
+                  where date(order_date)="2022-08-10" 
+                  group by system_ref_no,order_date,transaction_status,order_no
+
+         ) as agg_rev_output
+        ON agg_txn_output.AGG_TRANS_ID=agg_rev_output.REF_AGG_TRANS_ID
+        )
+        ON SDL_TRANS_ID=AGG_TRANS_ID
     '''
     
     job_config = bigquery.QueryJobConfig(destination='spicemoney-dwh.sm_recon.ts_recharge_spice_vs_tw_njri_jio', write_disposition='WRITE_TRUNCATE' ,  query_parameters=[
@@ -612,7 +630,7 @@ def main():
     
     
     sql_query='''
-            select TRANSFER_DATE,CLIENT_ID,AMOUNT_TRANSFERRED,COMMENTS,FTR_UNIQUE_IDENTIFICATION_NO,TRANS_TYPE,device_type,OPERATOR_TITLE,AGG_ID,COMMISSION_AMOUNT,AGG_AMOUNT,Difference_AmntTransfer_ComAmount,round(Calculated_Commission,4) as Calculated_Commission ,ACTUAL_COMMISSION as Actual_Commission,round(Diff_Cal_Vs_Actual_Commission,4) as Diff_Cal_Vs_Actual_Commission,ACTUAL_COMMISSION_PERCENTAGE,
+                       select TRANSFER_DATE,CLIENT_ID,AMOUNT_TRANSFERRED,COMMENTS,FTR_UNIQUE_IDENTIFICATION_NO,TRANS_TYPE,device_type,OPERATOR_TITLE,AGG_ID,COMMISSION_AMOUNT,AGG_AMOUNT,Difference_AmntTransfer_ComAmount,round(Calculated_Commission,4) as Calculated_Commission ,ACTUAL_COMMISSION as Actual_Commission,round(Diff_Cal_Vs_Actual_Commission,4) as Diff_Cal_Vs_Actual_Commission,ACTUAL_COMMISSION_PERCENTAGE,
         Cal_Commission_Percentage,round(Diff_Cal_Vs_Actual_Charges_Percentage,4) as Diff_Cal_Vs_Actual_Charges_Percentage,
         round(AGG_COMMISSION_PERCENTAGE,4) as AGG_COMMISSION_PERCENTAGE from 
 
@@ -674,19 +692,22 @@ def main():
         ON recharge_output.trans_id=FTR_UNIQUE_IDENTIFICATION_NO
         LEFT OUTER JOIN
         (
-          select commission_amount as NJRI_Commission_Amount,recharge_amount as NJRI_Amount,system_reference_no from `sm_recon.ts_recharge_njri_commission_calculate_report`
+          select commission_amount as NJRI_Commission_Amount,recharge_amount as NJRI_Amount,system_reference_no from `sm_recon.ts_recharge_njri_commission_calculate_report` where date(order_date)="2022-08-10"
         ) as njri_commission_output
         ON njri_commission_output.system_reference_no=FTR_UNIQUE_IDENTIFICATION_NO
         LEFT OUTER JOIN
         (
-          select amount as TW_Amount,amount_deducted,client_txn_id,amount-amount_deducted as TW_Commission_Amount from `sm_recon.ts_recharge_think_wallet_log` where status in ('Success','Pending','Rollback')
+          select amount as TW_Amount,amount_deducted,client_txn_id,amount-amount_deducted as TW_Commission_Amount from `sm_recon.ts_recharge_think_wallet_log` where status in ('Success','Pending','Rollback') and date(request_timestamp)="2022-08-10"
         ) as tw_commision_output
         ON tw_commision_output.client_txn_id=FTR_UNIQUE_IDENTIFICATION_NO
         )
         )
         )
         )
-    
+
+
+
+
     '''
     
     job_config = bigquery.QueryJobConfig(destination='spicemoney-dwh.sm_recon.ts_recharge_ftr_vs_njri_tw_commission_validation', write_disposition='WRITE_TRUNCATE' ,  query_parameters=[
@@ -701,9 +722,104 @@ def main():
     results = query_job.result()
     
     
+     ################################################################################################################
+    #5-6 Revoke Commission Validation query
+    ###############################################################################################################
+    
+    
+    
+    sql_query='''
+
+       select TRANSFER_DATE,CLIENT_ID,AMOUNT_TRANSFERRED,COMMENTS,FTR_UNIQUE_IDENTIFICATION_NO,TRANS_TYPE,device_type,OPERATOR_TITLE,AGG_ID,REVOKE_COMMISSION_AMOUNT,AGG_AMOUNT,Difference_AmntTransfer_ComAmount,round(Calculated_Commission,4) as Calculated_Commission ,ACTUAL_COMMISSION as Actual_Commission,round(Diff_Cal_Vs_Actual_Commission,4) as Diff_Cal_Vs_Actual_Commission,ACTUAL_COMMISSION_PERCENTAGE,
+Cal_Commission_Percentage,round(Diff_Cal_Vs_Actual_Charges_Percentage,4) as Diff_Cal_Vs_Actual_Charges_Percentage,
+round(AGG_REVOKE_COMMISSION_PERCENTAGE,4) as AGG_REVOKE_COMMISSION_PERCENTAGE from 
+
+
+(select TRANSFER_DATE,CLIENT_ID,AMOUNT_TRANSFERRED,COMMENTS,FTR_UNIQUE_IDENTIFICATION_NO,TRANS_TYPE,device_type,OPERATOR_TITLE,AGG_ID,REVOKE_COMMISSION_AMOUNT,AGG_AMOUNT,round(DIFFERENCE,4) as Difference_AmntTransfer_ComAmount,Calculated_Commission,ACTUAL_COMMISSION as Actual_Commission,
+Calculated_Commission-ACTUAL_COMMISSION as Diff_Cal_Vs_Actual_Commission,ACTUAL_COMMISSION_PERCENTAGE,
+round(Cal_Commission_Percentage,4) as Cal_Commission_Percentage,
+(ACTUAL_COMMISSION_PERCENTAGE-Cal_Commission_Percentage) as Diff_Cal_Vs_Actual_Charges_Percentage,
+AGG_REVOKE_COMMISSION_PERCENTAGE from 
+(
+select TRANSFER_DATE,CLIENT_ID,round(AMOUNT_TRANSFERRED,4) as AMOUNT_TRANSFERRED,COMMENTS,FTR_UNIQUE_IDENTIFICATION_NO,TRANS_TYPE,device_type,OPERATOR_TITLE,AGG_ID,round(REVOKE_COMMISSION_AMOUNT,4) as REVOKE_COMMISSION_AMOUNT,round(AGG_AMOUNT,4) as AGG_AMOUNT,
+AMOUNT_TRANSFERRED-REVOKE_COMMISSION_AMOUNT as DIFFERENCE,
+AMOUNT_TRANSFERRED/AGG_AMOUNT as Calculated_Commission,
+(AGG_AMOUNT*ACTUAL_COMMISSION_PERCENTAGE)/100 as  ACTUAL_COMMISSION,
+(Calculated_Commission/AMOUNT_TRANSFERRED)*100 as Cal_Commission_Percentage,
+ACTUAL_COMMISSION_PERCENTAGE, 
+(REVOKE_COMMISSION_AMOUNT/AGG_AMOUNT)*100 as AGG_REVOKE_COMMISSION_PERCENTAGE from 
+(
+select TRANSFER_DATE,CLIENT_ID,AMOUNT_TRANSFERRED,COMMENTS,FTR_UNIQUE_IDENTIFICATION_NO,TRANS_TYPE,device_type,OPERATOR_TITLE,AGG_ID,REVOKE_COMMISSION_AMOUNT,AGG_AMOUNT,AMOUNT_TRANSFERRED-REVOKE_COMMISSION_AMOUNT as DIFFERENCE,
+AMOUNT_TRANSFERRED/AGG_AMOUNT as Calculated_Commission,
+CASE
+  when OPERATOR_TITLE IN ('AIRTEL','RELIANCE_JIO') then 0.50
+  when device_type="Mobile" and AGG_AMOUNT <200 then 0.75
+  when device_type="Mobile" and AGG_AMOUNT >=200 then 2.00
+  when device_type="DTH" then 1.50
+  end as ACTUAL_COMMISSION_PERCENTAGE
+ from 
+(select TRANSFER_DATE,CLIENT_ID,AMOUNT_TRANSFERRED,COMMENTS,FTR_UNIQUE_IDENTIFICATION_NO,TRANS_TYPE,device_type,OPERATOR_TITLE,AGG_ID,
+CASE
+  when substr(FTR_UNIQUE_IDENTIFICATION_NO,0,2)='TW' then TW_Commission_Reversal_Amount
+  when substr(FTR_UNIQUE_IDENTIFICATION_NO,0,4)='NJRI' then NJRI_Commission_Reversal_Amount
+  end as REVOKE_COMMISSION_AMOUNT,
+CASE
+  when substr(FTR_UNIQUE_IDENTIFICATION_NO,0,2)='TW' then TW_Reversal_Amount
+  when substr(FTR_UNIQUE_IDENTIFICATION_NO,0,4)='NJRI' then NJRI_Reversal_Amount
+  end as AGG_AMOUNT
+from
+(select date(t1.transfer_date) as TRANSFER_DATE,
+t2.retailer_id AS CLIENT_ID,
+sum(t1.amount_transferred) as AMOUNT_TRANSFERRED,
+t1.comments as COMMENTS,t1.unique_identification_no as FTR_UNIQUE_IDENTIFICATION_NO,
+t1.trans_type as TRANS_TYPE,
+case 
+        when  substr(t1.unique_identification_no,0,2)='TW' then 'THINKWALNUT'
+         when  substr(t1.unique_identification_no,0,4)='NJRI' then 'NJRI'
+         when  substr(t1.unique_identification_no,0,3)='JIO' then 'JIO'
+         end as AGG_ID       
+FROM spicemoney-dwh.prod_dwh.cme_wallet as t1
+        JOIN spicemoney-dwh.prod_dwh.client_details as t2 ON t1.retailer_wallet_id=t2.ret_wallet_id
+        where t1.comments IN ('RECHARGE-Discount-Mobile-Reversal') and 
+        DATE(t1.transfer_date) = "2022-08-12"
+        GROUP BY t1.UNIQUE_IDENTIFICATION_NO,CLIENT_ID,COMMENTS,TRANS_TYPE,TRANSFER_DATE,AGG_ID
+) as FTR_revoke_output
+LEFT OUTER JOIN
+(
+ select t1.trans_id,t1.device_type,t1.operator_id,t2.name as OPERATOR_TITLE from prod_dwh.recharge t1, `prod_dwh.operator` t2
+ where t1.operator_id=t2.operator_id
+) as recharge_output
+ON recharge_output.trans_id=FTR_UNIQUE_IDENTIFICATION_NO
+LEFT OUTER JOIN
+(
+  select commission_amount as NJRI_Commission_Reversal_Amount,recharge_amount as NJRI_Reversal_Amount,system_reference_no from `sm_recon.ts_recharge_njri_reversed_commission_report` where date(reversal_date)="2022-08-12"
+) as njri_reversed_commission_output
+ON njri_reversed_commission_output.system_reference_no=FTR_UNIQUE_IDENTIFICATION_NO
+LEFT OUTER JOIN
+(
+  select amount as TW_Reversal_Amount,amount_deducted,client_txn_id,amount-rollback_amount as TW_Commission_Reversal_Amount from `sm_recon.ts_recharge_think_wallet_log` where status in ('Pending','Rollback') and date(request_timestamp)="2022-08-12"
+) as tw_commision_output
+ON tw_commision_output.client_txn_id=FTR_UNIQUE_IDENTIFICATION_NO
+)
+)
+)
+)
+
+    '''
+    
+    job_config = bigquery.QueryJobConfig(destination='spicemoney-dwh.sm_recon.ts_recharge_ftr_vs_njri_tw_revoke_commission_validation', write_disposition='WRITE_TRUNCATE' ,  query_parameters=[
+    bigquery.ScalarQueryParameter("date", "DATE" , current_date)])
+
+    #job_config2 = bigquery.QueryJobConfig(destination='spicemoney-dwh.prod_sm_recon.prod_recharge_ftr_vs_njri_tw_revoke_commission_validation', write_disposition='WRITE_APPEND' ,  query_parameters=[
+    #bigquery.ScalarQueryParameter("date", "DATE" , current_date)])
+
+    query_job = client.query(sql_query, job_config=job_config)
+    #query_job = client.query(sql_query, job_config=job_config2)
+
+    results = query_job.result()
     
     ################################################################################################################
-    #Recharge Commission Summary
+    #Recharge FTR Commission Summary
     ###############################################################################################################
     
     sql_query='''
@@ -731,6 +847,7 @@ def main():
         ) as recharge_output
         ON recharge_output.trans_id=FTR_UNIQUE_IDENTIFICATION_NO
     '''
+    
     job_config = bigquery.QueryJobConfig(destination='spicemoney-dwh.sm_recon.ts_recharge_ftr_commission_summary', write_disposition='WRITE_TRUNCATE' ,  query_parameters=[
     bigquery.ScalarQueryParameter("date", "DATE" , current_date)])
 
@@ -741,13 +858,60 @@ def main():
     #query_job = client.query(sql_query, job_config=job_config2)
 
     results = query_job.result()
+     ################################################################################################################
+    #Recharge Wallet_Trans Commission Summary
+    ###############################################################################################################
+    sql_query='''
+    select Wallet_Comment,Refund_Comments,
+        case 
+                when  substr(spice_trans_id,0,2)='TW' then 'THINKWALNUT'
+                 when  substr(spice_trans_id,0,4)='NJRI' then 'NJRI'
+                 when  substr(spice_trans_id,0,3)='JIO' then 'JIO'
+                 end as Rch_Aggregator_Spice_Wallet,Rch_Aggregator_Refund,client_id as Wallet_Client_Id,Refund_Client_Id, device_type as Wallet_Device_Type,Refund_Device_Type ,OPERATOR_TITLE as Wallet_Operator_Title,Refund_Operator_Title,coalesce(SumOf_Trans_Amount,0) as SumOf_Trans_Amount,coalesce (SumOfB2B_RFD,0) as SumOfB2B_RFD,coalesce(SumOf_Trans_Amount,0)-coalesce (SumOfB2B_RFD,0) as NetAmount
+        from
+(select comments as Wallet_Comment,trans_id as spice_trans_id,sum(trans_amt) as SumOf_Trans_Amount,trans_date as Transaction_Date from prod_dwh.wallet_trans  where  DATE(trans_date)= "2022-08-10"  and comments in ('Recharge_Mobile')
+        group by trans_date ,trans_id,comments
+) as spice_wallet_output
+LEFT OUTER JOIN
+(
+ select date(recharge_date),t1.trans_id as recharge_trans_id,t1.client_id,t1.device_type,t1.operator_id,t2.name as OPERATOR_TITLE from prod_dwh.recharge t1, `prod_dwh.operator` t2
+ where t1.operator_id=t2.operator_id 
+) as recharge_output
+ON recharge_output.recharge_trans_id=spice_wallet_output.spice_trans_id
+FULL JOIN
+(  
+  select comments as Refund_Comments,
+        case 
+                when  substr(Refund_Trans_id,0,2)='TW' then 'THINKWALNUT'
+                 when  substr(Refund_Trans_id,0,4)='NJRI' then 'NJRI'
+                 when  substr(Refund_Trans_id,0,3)='JIO' then 'JIO'
+                 end as Rch_Aggregator_Refund ,Refund_Trans_id as Refund_Transaction_Id,client_id as Refund_Client_Id, device_type as Refund_Device_Type ,OPERATOR_TITLE as Refund_Operator_Title,SumOfB2B_RFD
+        from
+  (
+  select trans_id as Refund_Trans_id,refund_amt as SumOfB2B_RFD,refund_date,trans_date,comments
+                from prod_dwh.client_refund a, prod_dwh.distributor_retailer b , prod_dwh.client_wallet c where
+                a.client_id= b.retailer_id and b.distributor_id= c.client_id and refund_type="Recharge" and date(refund_date)="2022-08-10"
+) as refund_report_output
+LEFT OUTER JOIN
+( select date(recharge_date),t1.trans_id,t1.client_id,t1.device_type,t1.operator_id,t2.name as OPERATOR_TITLE from prod_dwh.recharge t1, `prod_dwh.operator` t2
+ where t1.operator_id=t2.operator_id 
+) as refund_recharge_output
+ON refund_recharge_output.trans_id=refund_report_output.Refund_Trans_id
+) as refund_result
+ON spice_wallet_output.spice_trans_id=refund_result.Refund_Transaction_Id
+
+
+    '''
+    
+    job_config = bigquery.QueryJobConfig(destination='spicemoney-dwh.sm_recon.ts_recharge_wallet_trans_commission_summary', write_disposition='WRITE_TRUNCATE' ,  query_parameters=[
+    bigquery.ScalarQueryParameter("date", "DATE" , current_date)])
+
+    #job_config2 = bigquery.QueryJobConfig(destination='spicemoney-dwh.prod_sm_recon.prod_recharge_ftr_commission_summary', write_disposition='WRITE_APPEND' ,  query_parameters=[
+    #bigquery.ScalarQueryParameter("date", "DATE" , current_date)])
+
+    query_job = client.query(sql_query, job_config=job_config)
+    #query_job = client.query(sql_query, job_config=job_config2)
 main()
-
-
-# In[ ]:
-
-
-
 
 
 # In[ ]:
