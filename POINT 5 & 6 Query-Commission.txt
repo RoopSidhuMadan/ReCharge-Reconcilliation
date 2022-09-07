@@ -60,12 +60,12 @@ LEFT OUTER JOIN
 ON recharge_output.trans_id=FTR_UNIQUE_IDENTIFICATION_NO
 LEFT OUTER JOIN
 (
-  select commission_amount as NJRI_Commission_Amount,recharge_amount as NJRI_Amount,system_reference_no from `sm_recon.ts_recharge_njri_commission_calculate_report`
+  select commission_amount as NJRI_Commission_Amount,recharge_amount as NJRI_Amount,system_reference_no from `sm_recon.ts_recharge_njri_commission_calculate_report` where date(order_date)="2022-08-10"
 ) as njri_commission_output
 ON njri_commission_output.system_reference_no=FTR_UNIQUE_IDENTIFICATION_NO
 LEFT OUTER JOIN
 (
-  select amount as TW_Amount,amount_deducted,client_txn_id,amount-amount_deducted as TW_Commission_Amount from `sm_recon.ts_recharge_think_wallet_log` where status in ('Success','Pending','Rollback')
+  select amount as TW_Amount,amount_deducted,client_txn_id,amount-amount_deducted as TW_Commission_Amount from `sm_recon.ts_recharge_think_wallet_log` where status in ('Success','Pending','Rollback') and date(request_timestamp)="2022-08-10"
 ) as tw_commision_output
 ON tw_commision_output.client_txn_id=FTR_UNIQUE_IDENTIFICATION_NO
 )
